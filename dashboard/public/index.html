@@ -6,6 +6,7 @@
 <title>Cambridge Crime Pipeline</title>
 <meta name="description" content="A cloud data pipeline that turns the Cambridge Police daily log into live charts. Updated every day.">
 <meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -236,7 +237,7 @@ function bar(id, labels, values, horizontal, thin) {
       marker:{color:css('--accent')}, hovertemplate:horizontal?'%{y}: %{x}<extra></extra>':'%{x}: %{y}<extra></extra>'}],
     {margin:{t:8,r:8,b:36,l:horizontal?8:44}, paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)',
      font:{family:'Geist, system-ui, sans-serif', color:css('--mut'), size:12}, bargap:.35,
-     xaxis:Object.assign({gridcolor:horizontal?grid:'rgba(0,0,0,0)', zeroline:false, automargin:true, tickangle:0},
+     xaxis:Object.assign({gridcolor:horizontal?grid:'rgba(0,0,0,0)', zeroline:false, automargin:true, tickangle:0, ticks:'outside', ticklen:10, tickcolor:'rgba(0,0,0,0)'},
        thin ? {tickmode:'array', tickvals:labels.filter((_, i) => i % 3 === 0), ticktext:labels.filter((_, i) => i % 3 === 0)} : {}),
      yaxis:{gridcolor:horizontal?'rgba(0,0,0,0)':grid, zeroline:false, automargin:true, autorange:horizontal?'reversed':true}},
     {responsive:true, displayModeBar:false});

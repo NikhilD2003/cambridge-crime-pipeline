@@ -41,6 +41,8 @@ class handler(BaseHTTPRequestHandler):
         try:
             y = parse_qs(urlparse(self.path).query).get("year", [None])[0]
             body, code = json.dumps(build(int(y) if y else None)).encode(), 200
+        except ValueError:  # bad ?year=
+            body, code = json.dumps({"error": "year must be a number"}).encode(), 400
         except Exception as e:  # never leak connection details
             body, code = json.dumps({"error": type(e).__name__}).encode(), 500
         self.send_response(code)
