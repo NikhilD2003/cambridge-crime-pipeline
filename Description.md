@@ -260,7 +260,7 @@ Other checks: `python src/test_connection.py`, `python src/check_column_types.py
 
 | Test | Result |
 |---|---|
-| Extract + validate + transform on live API | 12,845 raw rows → ~12.2k clean rows, no duplicate ids |
+| Extract + validate + transform on live API | 12,845 raw rows → 12,845 clean rows on 17 Nov 2026, no duplicate ids |
 | Load upsert against SQLite (same `ON CONFLICT` syntax) | Second run changed no rows; missing timestamp stored as NULL |
 | Full Prefect flow end to end | Completed |
 | Website against live Supabase (local server + headless browser screenshot) | API returns aggregates for all years and per year; page renders KPIs and four charts in light and dark |

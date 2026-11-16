@@ -76,7 +76,7 @@ Push repo to GitHub -> Settings -> Secrets and variables -> Actions -> add `DATA
 - Optional local database first: `docker compose up -d`, then use the `DATABASE_URL` shown in `.env.example`. `docker build -t cpd-etl .` builds the ETL as a container.
 
 ## 8. Tested
-Extract/validate/transform run on the live API (12,845 raw -> ~12.2k clean rows). Load upsert verified idempotent (second run adds 0 rows; missing timestamps become NULL). Dashboard renders with no errors (4 charts, 3 KPIs). The Supabase connection itself is tested only once you add your `DATABASE_URL`.
+Extract/validate/transform run on the live API (12,845 raw -> 12,845 clean rows on 17 Nov 2026). Load upsert verified idempotent (second run adds 0 rows; missing timestamps become NULL). Dashboard renders with no errors (4 charts, 3 KPIs). The Supabase connection itself is tested only once you add your `DATABASE_URL`.
 
 ## 9. Limitations / next steps
 - Full re-pull each day (~12k rows, fast); switch to incremental via `last_updated` if the data grows.
