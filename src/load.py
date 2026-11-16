@@ -40,6 +40,10 @@ def load_into_postgres(df, chunk=2000):
         for i in range(0, len(rows), chunk):
             execute_values(cur, sql, rows[i:i + chunk])
         conn.commit()
+        cur.execute("SELECT count(*) FROM cpd_incidents WHERE id = ANY(%s)", ([int(i) for i in df["id"]],))
+        n = cur.fetchone()[0]
+        if n != len(rows):  # row-count gate: every row we sent must now be in the table
+            raise RuntimeError(f"Row count mismatch: sent {len(rows)}, found {n} in cpd_incidents")
     finally:
         conn.close()
     return len(rows)

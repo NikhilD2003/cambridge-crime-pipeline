@@ -70,7 +70,10 @@ Push repo to GitHub -> Settings -> Secrets and variables -> Actions -> add `DATA
 `dashboard/public/index.html` is the page, `dashboard/api/data.py` is the API that queries Supabase (cached 1 hour at the edge).
 
 ## 7. Verify
-Supabase -> SQL editor: `select count(*), max(date_time) from cpd_incidents;`
+- Supabase -> SQL editor: `select count(*), max(date_time) from cpd_incidents;`
+- `python src/test_connection.py` (DB reachable) and `python src/check_column_types.py` (`date_time`, `last_updated` must be timestamps).
+- `python tests/test_pipeline.py` (offline validate/transform checks). `load.py` itself fails the run if the rows sent differ from the rows found in the table.
+- Optional local database first: `docker compose up -d`, then use the `DATABASE_URL` shown in `.env.example`. `docker build -t cpd-etl .` builds the ETL as a container.
 
 ## 8. Tested
 Extract/validate/transform run on the live API (12,845 raw -> ~12.2k clean rows). Load upsert verified idempotent (second run adds 0 rows; missing timestamps become NULL). Dashboard renders with no errors (4 charts, 3 KPIs). The Supabase connection itself is tested only once you add your `DATABASE_URL`.

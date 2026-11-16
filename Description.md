@@ -43,7 +43,7 @@ Police departments publish incident logs, but raw logs are hard to read. A resid
 
 Doing this by hand (download a CSV, tidy it in a spreadsheet) works once, but the Cambridge dataset is **updated daily**, so a manual process would be repeated forever and would be error-prone. A data pipeline automates the repetition: the same steps run on a schedule, the same quality rules are applied every time, and the database always holds the current state.
 
-The pipeline is deliberately **cloud-hosted** so it does not depend on one person's laptop. The database lives on Supabase, the scheduler runs on GitHub's servers and the dashboard runs on Streamlit's servers. Whoever clones the project, on any PC, connects to the same cloud database.
+The pipeline is deliberately **cloud-hosted** so it does not depend on one person's laptop. The database lives on Supabase, the scheduler runs on GitHub's servers and the website runs on Vercel's servers. Whoever clones the project, on any PC, connects to the same cloud database.
 
 ## 3. Glossary
 
@@ -91,7 +91,7 @@ Columns the pipeline **adds**: `year`, `month`, `day`, `hour` (extracted from `d
 
 ```
 ┌────────────┐   ┌─────────┐   ┌──────────┐   ┌───────────┐   ┌────────┐   ┌──────────────────┐   ┌───────────┐
-│ Socrata API│──▶│ Extract │──▶│ Validate │──▶│ Transform │──▶│  Load  │──▶│ Supabase Postgres│──▶│ Streamlit │
+│ Socrata API│──▶│ Extract │──▶│ Validate │──▶│ Transform │──▶│  Load  │──▶│ Supabase Postgres│──▶│ Vercel site│
 └────────────┘   └─────────┘   └──────────┘   └───────────┘   └────────┘   └──────────────────┘   │ dashboard │
                     └────────── Prefect flow "cpd_incident_etl" ─────────┘                           └───────────┘
                                          ▲
@@ -114,7 +114,9 @@ The layout follows the earlier Cassava Leaf Disease project (`src/`, `notebooks/
 crime-pipeline/
 ├── README.md              Quick-start documentation
 ├── Description.md         This document
-├── requirements.txt       Python dependencies
+├── requirements.txt       Python dependencies (pinned versions)
+├── Dockerfile             Optional: the ETL as a container
+├── docker-compose.yml     Optional: local PostgreSQL 16 for testing
 ├── .env                   Local secrets (git-ignored)
 ├── .env.example           Template for .env
 ├── .gitignore
@@ -124,7 +126,11 @@ crime-pipeline/
 │   ├── transform.py       Cleaning + date parts
 │   ├── load.py            Upsert into Postgres; connection helper
 │   ├── etl_pipeline.py    Prefect flow chaining the four stages
-│   └── schema.sql         Table definition
+│   ├── schema.sql         Table definition
+│   ├── test_connection.py     Prints PostgreSQL version() using DATABASE_URL
+│   └── check_column_types.py  Prints cpd_incidents column types
+├── tests/
+│   └── test_pipeline.py   Offline checks of validate + transform
 ├── dashboard/             Vercel website: public/index.html, api/data.py, dev.py
 ├── notebooks/
 │   └── Reference_Tutorial.ipynb   Original tutorial the project is based on
@@ -171,6 +177,13 @@ Philosophy: *fail loudly* when the data cannot be trusted (schema, timestamps, n
 ### 7.6 `src/schema.sql`
 Defines `cpd_incidents` with `id` as primary key, an index on `date_time`, and `ENABLE ROW LEVEL SECURITY`. With RLS on and no policies, Supabase's public REST API exposes nothing; this project connects with direct Postgres credentials instead.
 
+### 7.6a Verification helpers
+
+- `src/test_connection.py`: connects with `DATABASE_URL` and prints `select version()`.
+- `src/check_column_types.py`: lists `cpd_incidents` column types; `date_time` and `last_updated` must be timestamps or the dashboard cannot group by month.
+- `tests/test_pipeline.py`: offline checks (no network or DB) that a good frame is cleaned (duplicate and non-numeric ids dropped, year/month/day/hour added) and that null, non-ISO or missing-column input raises. Run `python tests/test_pipeline.py`.
+- Row-count gate in `load.py`: after the commit it counts the rows in `cpd_incidents` whose ids were just sent and raises `Row count mismatch` if the number differs.
+
 ### 7.7 `dashboard/` (the website, deployed on Vercel)
 - `public/index.html`: one static page (no build step). Floating navigation pill, hero with a live chart, a KPI strip, the five pipeline stages, a bento of live charts, the technology logos and a footer. Light and dark themes follow the system setting; motion respects `prefers-reduced-motion`.
 - `api/data.py`: a Vercel Python function. `GET /api/data?year=2026` runs five aggregate SQL queries on Supabase and returns JSON (totals, by hour, by month, top offences, top locations). Responses are cached at Vercel's edge for one hour. Passwords with `@` work (same last-`@` split as `load.py`).
@@ -208,6 +221,10 @@ python src/etl_pipeline.py        # ETL once
 python dashboard/dev.py           # http://localhost:8000
 ```
 Verify in Supabase SQL editor: `select count(*), max(date_time) from cpd_incidents;`
+
+Other checks: `python src/test_connection.py`, `python src/check_column_types.py`, `python tests/test_pipeline.py`.
+
+**Optional local database:** `docker compose up -d`, then set `DATABASE_URL=postgresql://crime_user:local_crime_password@localhost:5433/crime_trends`. `docker build -t cpd-etl .` builds the ETL as a container. Logs of a local run can go to `logs/` (git-ignored): `python src/etl_pipeline.py >> logs/pipeline.log 2>&1`.
 
 **Deploy:** push to GitHub, add the two secrets, and the daily job starts. For the website: Vercel → import the repo → **Root Directory `dashboard`** → add `DATABASE_URL` as an environment variable → Deploy.
 
@@ -247,6 +264,8 @@ Verify in Supabase SQL editor: `select count(*), max(date_time) from cpd_inciden
 | Load upsert against SQLite (same `ON CONFLICT` syntax) | Second run changed no rows; missing timestamp stored as NULL |
 | Full Prefect flow end to end | Completed |
 | Website against live Supabase (local server + headless browser screenshot) | API returns aggregates for all years and per year; page renders KPIs and four charts in light and dark |
+| Offline unit checks (`tests/test_pipeline.py`) | Good rows cleaned; null / non-ISO / missing-column input raises |
+| Row-count gate in `load.py` | Raises `Row count mismatch` when sent and stored rows differ (needs your `DATABASE_URL` to exercise) |
 | Real Supabase load | See the run log; the pooler URL needs the password fix in §7.4 |
 
 Bugs found and fixed during testing: unordered Socrata paging returned duplicate rows and skipped others (fixed by ordering on `:id`); timestamp binding errors on some drivers; dashboard assuming datetime dtype; passwords containing `@` breaking the connection URL; an invalid Socrata token aborting the run.
@@ -262,7 +281,7 @@ Bugs found and fixed during testing: unordered Socrata paging returned duplicate
 
 ## 15. Future work
 
-Incremental loads using `last_updated`; data-quality alerts (email/Slack on failure); geocoding streets for a map; time-series forecasting; Metabase or Superset for ad-hoc analysis; unit tests and CI on pull requests; a read-only database role for the dashboard.
+Incremental loads using `last_updated`; data-quality alerts (email/Slack on failure); geocoding streets for a map; time-series forecasting; Metabase or Superset for ad-hoc analysis; CI that runs `tests/test_pipeline.py` on pull requests; a read-only database role for the dashboard.
 
 ## 16. Notebook walkthrough, section by section
 
@@ -290,7 +309,7 @@ The reference notebook is `notebooks/Reference_Tutorial.ipynb` (40 cells): a tut
 
 **Section 11 – Defining the pipeline with Prefect (cells 31–33).** Compares Airflow (DAGs, heavier infrastructure) with Prefect (decorators, simple deployment, Prefect Cloud). Rules: `@task` on each step, `@flow` on the function chaining them. `etl()` calls extract → validate → transform → load with prints (shown in the Prefect UI via `log_prints=True`), and `etl.serve(cron="0 0 * * *")` creates a daily deployment. → *Kept the decorators and flow in `src/etl_pipeline.py`; scheduling moved to GitHub Actions.*
 
-**Section 12 – Visualizing in Metabase (cells 34–39).** Compares Streamlit with BI tools (Tableau, Superset, Metabase) and picks Metabase for a quick proof of concept. The expanded compose file adds `metabase` (port 3000, application DB settings, healthcheck) and `postgres_mb` (Metabase's own Postgres), a shared bridge network `metanet1`, and two volumes. Cell 37 gives the connection string Metabase uses to reach `postgres_cpd`. Cell 39 lists dashboard findings: incidents peak mid-late afternoon, nearly all are type `INCIDENT`, and counts peaked around Aug–Oct 2025 then declined. Because Metabase queries the database live, the dashboard never shows stale data. → *Replaced by the Streamlit dashboard (same idea, free cloud hosting).*
+**Section 12 – Visualizing in Metabase (cells 34–39).** Compares Streamlit with BI tools (Tableau, Superset, Metabase) and picks Metabase for a quick proof of concept. The expanded compose file adds `metabase` (port 3000, application DB settings, healthcheck) and `postgres_mb` (Metabase's own Postgres), a shared bridge network `metanet1`, and two volumes. Cell 37 gives the connection string Metabase uses to reach `postgres_cpd`. Cell 39 lists dashboard findings: incidents peak mid-late afternoon, nearly all are type `INCIDENT`, and counts peaked around Aug–Oct 2025 then declined. Because Metabase queries the database live, the dashboard never shows stale data. → *Replaced by the Vercel website (same idea, free cloud hosting).*
 
 **Notebook issues worth knowing:** `to_sql(replace)` drops the schema; Python 3.12-only f-string; healthcheck `interval: 15` lacks a unit; no `depends_on` for Metabase's database; cell 39 is prose in a code cell; cells 17–26 assume Colab/Linux; imports in cell 32 are commented out so it only works inside the notebook session.
 
