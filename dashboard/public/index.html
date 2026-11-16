@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cambridge Crime Pipeline</title>
+<meta name="description" content="A cloud data pipeline that turns the Cambridge Police daily log into live charts. Updated every day.">
+<meta name="color-scheme" content="light dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1" defer></script>
+<script src="https://cdn.plot.ly/plotly-basic-2.35.2.min.js" defer></script>
+<style>
+/* One theme, auto by system. One accent. One radius system: shells 28, cores 22, controls pill. */
+:root{
+  --bg:#f3f4f6; --surface:#ffffff; --ink:#0f1218; --mut:#5b6472; --line:rgba(15,18,24,.09);
+  --shell:rgba(15,18,24,.045); --accent:#1d4ed8; --on-accent:#ffffff; --hl:rgba(255,255,255,.7);
+  --ease:cubic-bezier(.32,.72,0,1);
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0a0d13; --surface:#11151d; --ink:#e8eaee; --mut:#98a1b0; --line:rgba(255,255,255,.09);
+  --shell:rgba(255,255,255,.04); --accent:#6c97ff; --on-accent:#0a0d13; --hl:rgba(255,255,255,.07);
+}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:88px}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.6 "Geist",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+.mono{font-family:"Geist Mono",ui-monospace,monospace}
+a{color:inherit}
+
+/* nav: floating pill */
+nav{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:20;display:flex;align-items:center;gap:28px;
+  padding:8px 10px 8px 22px;border-radius:999px;background:color-mix(in srgb,var(--surface) 78%,transparent);
+  backdrop-filter:blur(18px) saturate(160%);-webkit-backdrop-filter:blur(18px) saturate(160%);
+  border:1px solid var(--line);box-shadow:inset 0 1px 0 var(--hl);white-space:nowrap}
+nav b{font-weight:600;letter-spacing:-.01em}
+nav .links{display:flex;gap:4px}
+nav .links a{padding:6px 14px;border-radius:999px;text-decoration:none;color:var(--mut);font-size:.94rem;transition:color .4s var(--ease),background .4s var(--ease)}
+nav .links a:hover{color:var(--ink);background:var(--shell)}
+@media(max-width:640px){nav{gap:10px;padding-left:16px}nav b{display:none}}
+
+/* buttons: pill with nested icon */
+.btn{display:inline-flex;align-items:center;gap:14px;padding:8px 8px 8px 24px;border-radius:999px;border:1px solid var(--line);
+  background:transparent;color:var(--ink);font:500 1rem/1 "Geist",sans-serif;text-decoration:none;cursor:pointer;white-space:nowrap;
+  transition:transform .5s var(--ease),background .4s var(--ease)}
+.btn .ic{display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:var(--shell);transition:transform .5s var(--ease)}
+.btn:hover .ic{transform:translate(2px,-1px) scale(1.06)}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:var(--accent);color:var(--on-accent);border-color:transparent}
+.btn.primary .ic{background:color-mix(in srgb,var(--on-accent) 18%,transparent)}
+.btn:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+
+/* double-bezel */
+.shell{padding:6px;border-radius:28px;background:var(--shell);border:1px solid var(--line)}
+.core{position:relative;overflow:hidden;border-radius:22px;background:var(--surface);box-shadow:inset 0 1px 0 var(--hl);padding:18px;height:100%}
+.core h3{margin:0 0 4px;font-size:1rem;font-weight:600;letter-spacing:-.01em}
+.core p.sub{margin:0 0 6px;color:var(--mut);font-size:.9rem}
+.chart{height:300px}
+.chart.tall{height:340px}
+.skel::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,var(--shell) 50%,transparent 70%);
+  transform:translateX(-100%);animation:sh 1.6s var(--ease) infinite}
+@keyframes sh{to{transform:translateX(100%)}}
+.state{display:none;padding:56px 12px;text-align:center;color:var(--mut)}
+.state .btn{margin-top:14px}
+
+/* hero */
+.hero{min-height:100dvh;padding:96px 0 40px;display:grid;align-items:center}
+.hero .wrap{display:grid;grid-template-columns:1.05fr 1fr;gap:56px;align-items:center}
+h1{margin:0;font-size:clamp(2.3rem,4.1vw,3.7rem);line-height:1.04;letter-spacing:-.045em;font-weight:600;text-wrap:balance}
+.lede{margin:22px 0 30px;max-width:46ch;color:var(--mut);font-size:1.12rem}
+.cta{display:flex;gap:12px;flex-wrap:wrap}
+@media(max-width:860px){.hero{min-height:auto;padding-top:96px}.hero .wrap{grid-template-columns:1fr;gap:36px}}
+
+/* stats */
+.stats{padding:24px 0 8px}
+.stats .wrap{display:grid;grid-template-columns:repeat(3,1fr) auto;gap:24px;align-items:end}
+.stat small{display:block;color:var(--mut);font-size:.88rem}
+.stat b{display:block;font:500 clamp(1.5rem,3.2vw,2.4rem)/1.15 "Geist Mono",monospace;letter-spacing:-.03em}
+label.yr{display:flex;flex-direction:column;gap:6px;font-size:.88rem;color:var(--mut)}
+select{appearance:none;padding:10px 38px 10px 18px;border-radius:999px;border:1px solid var(--line);background:var(--surface) no-repeat right 16px center/10px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23888' stroke-width='1.5'/%3E%3C/svg%3E");
+  color:var(--ink);font:500 1rem "Geist",sans-serif;cursor:pointer}
+@media(max-width:720px){.stats .wrap{grid-template-columns:1fr 1fr}}
+
+/* sections */
+section{padding:112px 0}
+h2{margin:0 0 14px;font-size:clamp(1.8rem,3.6vw,2.8rem);line-height:1.08;letter-spacing:-.035em;font-weight:600;max-width:16ch}
+.intro{color:var(--mut);max-width:44ch;margin:0}
+
+/* pipeline: sticky title + connected list */
+.pipe{display:grid;grid-template-columns:5fr 7fr;gap:64px;align-items:start}
+.pipe .head{position:sticky;top:110px}
+.stages{position:relative;display:grid;gap:36px;padding-left:76px;margin:0;list-style:none}
+.stages::before{content:"";position:absolute;left:27px;top:28px;bottom:28px;width:1px;background:var(--line)}
+.stage{position:relative}
+.stage i{position:absolute;left:-76px;top:0;display:grid;place-items:center;width:56px;height:56px;border-radius:50%;
+  background:var(--surface);border:1px solid var(--line);font-size:1.5rem;color:var(--accent);box-shadow:inset 0 1px 0 var(--hl)}
+.stage h3{margin:2px 0 4px;font-size:1.35rem;letter-spacing:-.02em}
+.stage p{margin:0;color:var(--mut);max-width:48ch}
+@media(max-width:860px){.pipe{grid-template-columns:1fr;gap:36px}.pipe .head{position:static}}
+
+/* bento */
+.bento{display:grid;grid-template-columns:repeat(12,1fr);gap:16px;margin-top:40px}
+.b1{grid-column:span 7}.b2{grid-column:span 5}.b3{grid-column:span 5}.b4{grid-column:span 7}
+@media(max-width:860px){.bento>*{grid-column:1/-1}}
+.note .core{background:radial-gradient(130% 130% at 0% 0%,color-mix(in srgb,var(--accent) 30%,var(--surface)),var(--surface) 70%);padding:28px;display:flex;flex-direction:column;justify-content:space-between;gap:20px}
+.note p{margin:0;max-width:44ch}
+.note .big{font-size:clamp(1.4rem,2.6vw,2rem);line-height:1.2;letter-spacing:-.03em;font-weight:600}
+.note small{color:var(--mut)}
+
+/* stack logos: logos only */
+.logos{display:flex;flex-wrap:wrap;gap:28px 48px;align-items:center;margin-top:36px}
+.logos img{height:30px;width:auto;opacity:.7;filter:grayscale(1);transition:opacity .5s var(--ease)}
+.logos img:hover{opacity:1}
+@media(prefers-color-scheme:dark){.logos img{filter:grayscale(1) invert(1)}}
+
+footer{padding:48px 0 64px;border-top:1px solid var(--line);color:var(--mut);font-size:.92rem}
+footer .wrap{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap}
+footer p{margin:0;max-width:60ch}
+
+/* motion: orchestrated hero load, soft scroll reveal. Collapses under reduced motion. */
+@media(prefers-reduced-motion:no-preference){
+  .rv{opacity:0;transform:translateY(28px);filter:blur(8px);
+    transition:opacity .9s var(--ease) var(--d,0s),transform .9s var(--ease) var(--d,0s),filter .9s var(--ease) var(--d,0s)}
+  .rv.in{opacity:1;transform:none;filter:none}
+}
+@media(prefers-reduced-motion:reduce){.skel::after{animation:none}html{scroll-behavior:auto}}
+</style>
+<noscript><style>.rv{opacity:1;transform:none;filter:none}</style></noscript>
+</head>
+<body>
+
+<nav aria-label="Main">
+  <b>Cambridge Crime Pipeline</b>
+  <div class="links"><a href="#pipeline">Pipeline</a><a href="#data">Live data</a><a href="#stack">Stack</a></div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div>
+      <h1 class="rv" style="--d:.05s">Cambridge crime, updated every day.</h1>
+      <p class="lede rv" style="--d:.18s">A cloud data pipeline turns the Cambridge Police daily log into charts anyone can open. No login, no spreadsheet.</p>
+      <div class="cta rv" style="--d:.3s">
+        <a class="btn primary" href="#data">Explore the data <span class="ic"><i class="ph-light ph-arrow-up-right"></i></span></a>
+        <a class="btn" href="#pipeline">How it works <span class="ic"><i class="ph-light ph-arrow-down"></i></span></a>
+      </div>
+    </div>
+    <div class="shell rv" style="--d:.2s">
+      <div class="core skel" id="heroCard">
+        <h3>When incidents happen</h3>
+        <p class="sub">Reported incidents by hour of day</p>
+        <div class="chart tall" id="c_hour"></div>
+        <div class="state" data-state><p>Could not load the data.</p><button class="btn" data-retry>Try again <span class="ic"><i class="ph-light ph-arrow-clockwise"></i></span></button></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="stats">
+  <div class="wrap">
+    <div class="stat rv"><small>Incidents</small><b id="k1">0</b></div>
+    <div class="stat rv" style="--d:.08s"><small>Latest record</small><b id="k2">0</b></div>
+    <div class="stat rv" style="--d:.16s"><small>Busiest hour</small><b id="k3">0</b></div>
+    <label class="yr rv" style="--d:.24s">Year <select id="year" aria-label="Filter by year"><option value="">All years</option></select></label>
+  </div>
+</div>
+
+<section id="pipeline">
+  <div class="wrap pipe">
+    <div class="head rv">
+      <h2>From city API to chart, every night.</h2>
+      <p class="intro">Five automated stages run on a schedule in the cloud. Nobody has to keep a laptop open.</p>
+    </div>
+    <ol class="stages">
+      <li class="stage rv"><i class="ph-light ph-download-simple"></i><h3>Extract</h3><p>Pulls every record from the city's open data API, retrying if the network drops.</p></li>
+      <li class="stage rv"><i class="ph-light ph-shield-check"></i><h3>Validate</h3><p>Checks columns, timestamps and required fields. Bad data stops the run before it reaches the database.</p></li>
+      <li class="stage rv"><i class="ph-light ph-funnel"></i><h3>Transform</h3><p>Removes duplicate and invalid IDs, then splits each timestamp into year, month, day and hour.</p></li>
+      <li class="stage rv"><i class="ph-light ph-database"></i><h3>Load</h3><p>Upserts into a Supabase PostgreSQL database, so running it twice never creates duplicates.</p></li>
+      <li class="stage rv"><i class="ph-light ph-globe-hemisphere-west"></i><h3>Serve</h3><p>This site reads the database through a small API and redraws every chart for the year you pick.</p></li>
+    </ol>
+  </div>
+</section>
+
+<section id="data" style="padding-top:40px">
+  <div class="wrap">
+    <h2 class="rv">What the log shows</h2>
+    <p class="intro rv" style="--d:.08s">Live numbers from the database. Change the year above and every chart updates.</p>
+    <div class="bento">
+      <div class="shell b1 rv"><div class="core skel"><h3>Incidents per month</h3><p class="sub">Is activity rising or falling?</p><div class="chart" id="c_month"></div><div class="state" data-state><p>Could not load the data.</p><button class="btn" data-retry>Try again <span class="ic"><i class="ph-light ph-arrow-clockwise"></i></span></button></div></div></div>
+      <div class="shell b2 rv" style="--d:.08s"><div class="core skel"><h3>Most reported offences</h3><p class="sub">Top eight by count</p><div class="chart" id="c_type"></div></div></div>
+      <div class="shell b3 rv"><div class="core skel"><h3>Top locations</h3><p class="sub">Ten streets with the most reports</p><div class="chart" id="c_loc"></div></div></div>
+      <div class="shell b4 note rv" style="--d:.08s"><div class="core">
+        <p class="big">Reported incidents, not total crime.</p>
+        <p>Locations are street level. Descriptions can name people in arrest reports, so this site never shows them.</p>
+        <small class="mono" id="fresh">Source: City of Cambridge open data, Daily Police Log</small>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<section id="stack" style="padding-top:40px">
+  <div class="wrap">
+    <h2 class="rv">Built with</h2>
+    <div class="logos rv" style="--d:.08s">
+      <img src="https://cdn.simpleicons.org/python/000000" alt="Python" loading="lazy">
+      <img src="https://cdn.simpleicons.org/pandas/000000" alt="pandas" loading="lazy">
+      <img src="https://cdn.simpleicons.org/prefect/000000" alt="Prefect" loading="lazy">
+      <img src="https://cdn.simpleicons.org/supabase/000000" alt="Supabase" loading="lazy">
+      <img src="https://cdn.simpleicons.org/postgresql/000000" alt="PostgreSQL" loading="lazy">
+      <img src="https://cdn.simpleicons.org/githubactions/000000" alt="GitHub Actions" loading="lazy">
+      <img src="https://cdn.simpleicons.org/vercel/000000" alt="Vercel" loading="lazy">
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>PAI102 Data Engineering project. Data: City of Cambridge Open Data, Daily Police Log, refreshed every night.</p>
+    <p>Cambridge Crime Pipeline</p>
+  </div>
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let last = null;
+
+/* scroll reveal */
+const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), {threshold:.12});
+document.querySelectorAll('.rv').forEach(el => io.observe(el));
+
+function bar(id, labels, values, horizontal, thin) {
+  const grid = css('--line');
+  Plotly.react(id, [{type:'bar', orientation:horizontal?'h':'v', x:horizontal?values:labels, y:horizontal?labels:values,
+      marker:{color:css('--accent')}, hovertemplate:horizontal?'%{y}: %{x}<extra></extra>':'%{x}: %{y}<extra></extra>'}],
+    {margin:{t:8,r:8,b:36,l:horizontal?8:44}, paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)',
+     font:{family:'Geist, system-ui, sans-serif', color:css('--mut'), size:12}, bargap:.35,
+     xaxis:Object.assign({gridcolor:horizontal?grid:'rgba(0,0,0,0)', zeroline:false, automargin:true, tickangle:0},
+       thin ? {tickmode:'array', tickvals:labels.filter((_, i) => i % 3 === 0), ticktext:labels.filter((_, i) => i % 3 === 0)} : {}),
+     yaxis:{gridcolor:horizontal?'rgba(0,0,0,0)':grid, zeroline:false, automargin:true, autorange:horizontal?'reversed':true}},
+    {responsive:true, displayModeBar:false});
+}
+const hr = h => ((h % 12) || 12) + (h < 12 ? ' AM' : ' PM');
+
+function render(d) {
+  last = d;
+  $('k1').textContent = d.total.toLocaleString();
+  $('k2').textContent = d.latest ? new Date(d.latest.replace(' ', 'T')).toLocaleDateString('en-GB', {day:'numeric', month:'short', year:'numeric'}) : 'No data';
+  const peak = d.by_hour.reduce((a, b) => b[1] > a[1] ? b : a, [0, -1]);
+  $('k3').textContent = d.total ? hr(peak[0]) : 'No data';
+  $('fresh').textContent = d.latest ? 'Latest record ' + d.latest + '. Source: City of Cambridge open data.' : 'Source: City of Cambridge open data, Daily Police Log';
+  if ($('year').options.length === 1) d.years.forEach(y => $('year').add(new Option(y, y)));
+  bar('c_hour', d.by_hour.map(r => hr(r[0])), d.by_hour.map(r => r[1]), false, true);
+  bar('c_month', d.by_month.map(r => r[0]), d.by_month.map(r => r[1]));
+  bar('c_type', d.top_types.map(r => r[0]), d.top_types.map(r => r[1]), true);
+  bar('c_loc', d.top_locations.map(r => r[0]), d.top_locations.map(r => r[1]), true);
+  document.querySelectorAll('.core.skel').forEach(c => c.classList.remove('skel'));
+  document.querySelectorAll('[data-state]').forEach(s => s.style.display = 'none');
+  document.querySelectorAll('.chart').forEach(c => c.style.display = '');
+}
+
+function fail() {
+  document.querySelectorAll('.core.skel').forEach(c => c.classList.remove('skel'));
+  document.querySelectorAll('.chart').forEach(c => c.style.display = 'none');
+  document.querySelectorAll('[data-state]').forEach(s => s.style.display = 'block');
+}
+
+async function load(year) {
+  try {
+    await new Promise(r => window.Plotly ? r() : addEventListener('load', r, {once:true}));
+    const res = await fetch('/api/data' + (year ? '?year=' + year : ''));
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || res.status);
+    render(d);
+  } catch (e) { fail(); }
+}
+$('year').onchange = e => load(e.target.value);
+document.querySelectorAll('[data-retry]').forEach(b => b.onclick = () => { location.reload(); });
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => last && render(last));
+load('');
+</script>
+</body>
+</html>
