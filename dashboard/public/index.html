@@ -103,12 +103,8 @@ h2{margin:0 0 14px;font-size:clamp(1.8rem,3.6vw,2.8rem);line-height:1.08;letter-
 
 /* bento */
 .bento{display:grid;grid-template-columns:repeat(12,1fr);gap:16px;margin-top:40px}
-.b1{grid-column:span 7}.b2{grid-column:span 5}.b3{grid-column:span 5}.b4{grid-column:span 7}
+.b1{grid-column:span 7}.b2{grid-column:span 5}.b3{grid-column:1/-1}
 @media(max-width:860px){.bento>*{grid-column:1/-1}}
-.note .core{background:radial-gradient(130% 130% at 0% 0%,color-mix(in srgb,var(--accent) 30%,var(--surface)),var(--surface) 70%);padding:28px;display:flex;flex-direction:column;justify-content:space-between;gap:20px}
-.note p{margin:0;max-width:44ch}
-.note .big{font-size:clamp(1.4rem,2.6vw,2rem);line-height:1.2;letter-spacing:-.03em;font-weight:600}
-.note small{color:var(--mut)}
 
 /* stack logos: logos only */
 .logos{display:flex;flex-wrap:wrap;gap:28px 48px;align-items:center;margin-top:36px}
@@ -191,11 +187,6 @@ footer p{margin:0;max-width:60ch}
       <div class="shell b1 rv"><div class="core skel"><h3>Incidents per month</h3><p class="sub">Is activity rising or falling?</p><div class="chart" id="c_month"></div><div class="state" data-state><p>Could not load the data.</p><button class="btn" data-retry>Try again <span class="ic"><i class="ph-light ph-arrow-clockwise"></i></span></button></div></div></div>
       <div class="shell b2 rv" style="--d:.08s"><div class="core skel"><h3>Most reported offences</h3><p class="sub">Top eight by count</p><div class="chart" id="c_type"></div></div></div>
       <div class="shell b3 rv"><div class="core skel"><h3>Top locations</h3><p class="sub">Ten streets with the most reports</p><div class="chart" id="c_loc"></div></div></div>
-      <div class="shell b4 note rv" style="--d:.08s"><div class="core">
-        <p class="big">Reported incidents, not total crime.</p>
-        <p>Locations are street level. Descriptions can name people in arrest reports, so this site never shows them.</p>
-        <small class="mono" id="fresh">Source: City of Cambridge open data, Daily Police Log</small>
-      </div></div>
     </div>
   </div>
 </section>
@@ -217,8 +208,8 @@ footer p{margin:0;max-width:60ch}
 
 <footer>
   <div class="wrap">
-    <p>PAI102 Data Engineering project. Data: City of Cambridge Open Data, Daily Police Log, refreshed every night.</p>
-    <p>Cambridge Crime Pipeline</p>
+    <p>PAI102 Data Engineering project. Data: City of Cambridge Open Data, Daily Police Log, refreshed every night. Reported incidents, not total crime; locations are street level.</p>
+    <p>Cambridge Crime Pipeline &middot; <a href="status.html">Pipeline status</a></p>
   </div>
 </footer>
 
@@ -250,8 +241,7 @@ function render(d) {
   $('k2').textContent = d.latest ? new Date(d.latest.replace(' ', 'T')).toLocaleDateString('en-GB', {day:'numeric', month:'short', year:'numeric'}) : 'No data';
   const peak = d.by_hour.reduce((a, b) => b[1] > a[1] ? b : a, [0, -1]);
   $('k3').textContent = d.total ? hr(peak[0]) : 'No data';
-  $('fresh').textContent = d.latest ? 'Latest record ' + d.latest + '. Source: City of Cambridge open data.' : 'Source: City of Cambridge open data, Daily Police Log';
-  if ($('year').options.length === 1) d.years.forEach(y => $('year').add(new Option(y, y)));
+    if ($('year').options.length === 1) d.years.forEach(y => $('year').add(new Option(y, y)));
   bar('c_hour', d.by_hour.map(r => hr(r[0])), d.by_hour.map(r => r[1]), false, true);
   bar('c_month', d.by_month.map(r => r[0]), d.by_month.map(r => r[1]));
   bar('c_type', d.top_types.map(r => r[0]), d.top_types.map(r => r[1]), true);
